@@ -1,0 +1,158 @@
+{
+  "Datum": "16.11.2025 18:06:35",
+  "Typ": "Jahresabnahme",
+  "Ergebnisse": {
+    "Betriebsbremse": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Handbremse": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Bremsleitungen": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Käfig": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Dach": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Spritzwand": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Getriebetunnel": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Abschleppösen": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Karosserie": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Batterie": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Notausschalter": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Aufkleber/Markierung": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Achsen": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Federn": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Stoßdämpfer": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Achsaufhängung": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Radstand": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Radausschnitt": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Reifenprofil": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Reifengröße": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Felgen": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Kraftstofftank": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Leitungen": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Unterfahrschutz": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Kühlerschläuche": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Auspuff": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Aufkleber Sponsoren": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Startnummer": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Optischer Zustand": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    },
+    "Undichtigkeiten": {
+      "Status": "Erfüllt",
+      "Bemerkung": "",
+      "Bilder": []
+    }
+  },
+  "Unterschrift": "TEST",
+  "Klasse": "Prototype"
+}

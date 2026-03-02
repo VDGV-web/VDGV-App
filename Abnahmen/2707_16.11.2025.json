@@ -1,0 +1,86 @@
+{
+    "startnummer": "2707",
+    "name": "Manuel Stiltz",
+    "klasse": "Prototype",
+    "lauf": "16.11.2025 – JHV",
+    "sektionen": {
+        "2": {
+            "text": "Das ist ein Test",
+            "bilder": [],
+            "status": "Erledigt",
+            "kommentar": "ok",
+            "veranstalter_unterschrift": "Stoppa"
+        },
+        "3": {
+            "text": "",
+            "bilder": [],
+            "status": "Erledigt",
+            "kommentar": "",
+            "veranstalter_unterschrift": ""
+        },
+        "4": {
+            "text": "",
+            "bilder": [
+                "abnahmen\\images\\2707_4_IMG_20240602_180121_697.jpg"
+            ],
+            "status": "Erledigt",
+            "kommentar": "",
+            "veranstalter_unterschrift": ""
+        },
+        "5": {
+            "text": "",
+            "bilder": [],
+            "status": "Erledigt",
+            "kommentar": "",
+            "veranstalter_unterschrift": ""
+        },
+        "6": {
+            "text": "",
+            "bilder": [],
+            "status": "Erledigt",
+            "kommentar": "",
+            "veranstalter_unterschrift": ""
+        },
+        "7": {
+            "text": "",
+            "bilder": [],
+            "status": "Erledigt",
+            "kommentar": "",
+            "veranstalter_unterschrift": ""
+        },
+        "8": {
+            "text": "",
+            "bilder": [],
+            "status": "Offen",
+            "kommentar": "",
+            "veranstalter_unterschrift": ""
+        },
+        "9": {
+            "text": "Die Stange ist zu kurz",
+            "bilder": [],
+            "status": "Erledigt",
+            "kommentar": "",
+            "veranstalter_unterschrift": "Stoppa",
+            "veranstalter_bilder": [
+                "abnahmen\\images\\veranstalter_2707_9_IMG_20240624_154157_057.jpg",
+                "abnahmen\\images\\veranstalter_2707_9_IMG_20240624_154157_057.jpg"
+            ]
+        },
+        "10": {
+            "text": "",
+            "bilder": [],
+            "status": "Offen",
+            "kommentar": "",
+            "veranstalter_unterschrift": ""
+        },
+        "11": {
+            "text": "",
+            "bilder": [],
+            "status": "Offen",
+            "kommentar": "",
+            "veranstalter_unterschrift": ""
+        }
+    },
+    "unterschrift": "Annalena Stoppa",
+    "datum": "2025-11-17 13:17:35"
+}
