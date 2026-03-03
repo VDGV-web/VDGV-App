@@ -1,9 +1,55 @@
 import streamlit as st
+import base64
+import os
 
+def set_mobile_app_icons(icon_path: str):
+    """Setzt Favicon + Apple-Touch-Icon für 'Zum Startbildschirm'."""
+    if not os.path.exists(icon_path):
+        st.warning(f"Icon nicht gefunden: {icon_path}")
+        return
+
+    with open(icon_path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    # PNG als Data-URL
+    href = f"data:image/png;base64,{b64}"
+
+    st.components.v1.html(
+        f"""
+        <script>
+        (function() {{
+            const href = "{href}";
+
+            // Favicon
+            let icon = document.querySelector("link[rel='icon']");
+            if (!icon) {{
+                icon = document.createElement("link");
+                icon.rel = "icon";
+                document.head.appendChild(icon);
+            }}
+            icon.type = "image/png";
+            icon.href = href;
+
+            // Apple Touch Icon (iOS Home Screen)
+            let apple = document.querySelector("link[rel='apple-touch-icon']");
+            if (!apple) {{
+                apple = document.createElement("link");
+                apple.rel = "apple-touch-icon";
+                document.head.appendChild(apple);
+            }}
+            apple.href = href;
+        }})();
+        </script>
+        """,
+        height=0,
+    )
 st.set_page_config(
     page_title="VDGV App",
-    page_icon="VDGV_Logo.png"
+    page_icon="VDGV_Logo.png",
+    layout="wide"
 )
+
+set_mobile_app_icons("VDGV_Logo.png")
 
 import streamlit as st
 import json
