@@ -1,4 +1,11 @@
 import streamlit as st
+
+st.set_page_config(
+    page_title="VDGV App",
+    page_icon="VDGV_Logo.png"
+)
+
+import streamlit as st
 import json
 import os
 
