@@ -5,7 +5,7 @@ import pandas as pd
 import os
 from datetime import datetime
 import json
-
+from supabase_client import get_supabase
 
 def show():
 
@@ -51,18 +51,41 @@ def show():
     # --------------------
     # Stammdaten laden/speichern
     # --------------------
-    def load_stammdaten(path):
-        if os.path.exists(path):
-            df_local = pd.read_excel(path, dtype=str).fillna("")
-            # Spalten sicherstellen
-            for c in ["Vorname", "Nachname", "Startnummer", "Klasse", "Lizenz", "Fahrzeug", "Verein", "Abnahme_Historie"]:
-                if c not in df_local.columns:
-                    df_local[c] = ""
-            # trim
-            for c in df_local.columns:
-                df_local[c] = df_local[c].astype(str).str.strip()
-            return df_local
-        return pd.DataFrame(columns=["Vorname", "Nachname", "Startnummer", "Klasse", "Lizenz", "Fahrzeug", "Verein", "Abnahme_Historie"])
+    df = load_stammdaten(stammdaten_file)
+    sb = get_supabase()
+    response = sb.table("fahrer").select("*").execute()
+    data = response.data if response.data else []
+
+    if not data:
+        return pd.DataFrame(columns=[
+            "Vorname", "Nachname", "Startnummer", "Klasse",
+            "Lizenz", "Fahrzeug", "Verein", "Abnahme_Historie"
+        ])
+
+    df_local = pd.DataFrame(data)
+
+    # Spalten aus Supabase auf deine bisherigen Namen umbenennen
+    rename_map = {
+        "vorname": "Vorname",
+        "nachname": "Nachname",
+        "startnummer": "Startnummer",
+        "klasse": "Klasse",
+        "lizenz": "Lizenz",
+        "fahrzeug": "Fahrzeug",
+        "verein": "Verein"
+    }
+
+    df_local = df_local.rename(columns=rename_map)
+
+    # Falls Spalten fehlen, ergänzen
+    for c in ["Vorname", "Nachname", "Startnummer", "Klasse", "Lizenz", "Fahrzeug", "Verein", "Abnahme_Historie"]:
+        if c not in df_local.columns:
+            df_local[c] = ""
+
+    for c in df_local.columns:
+        df_local[c] = df_local[c].astype(str).str.strip()
+
+    return df_local
 
     def save_stammdaten(df_local, path):
         os.makedirs(os.path.dirname(path), exist_ok=True)
