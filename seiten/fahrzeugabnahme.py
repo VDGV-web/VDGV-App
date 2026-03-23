@@ -4,7 +4,13 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
+from io import BytesIO
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer, Paragraph
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
 import json
+import base64
 from supabase_client import get_supabase
 
 
@@ -13,7 +19,6 @@ def show():
     # Rollenprüfung
     # --------------------
     role = st.session_state.get("role", "")
-
     if role not in ["admin", "admin2", "abnahme", "buero"]:
         st.error("Keine Berechtigung für Fahrzeugabnahme.")
         return
@@ -27,6 +32,7 @@ def show():
     # --------------------
     # Pfade
     # --------------------
+    reglement_file = r"D:\App_DGM\daten\VDGV_Reglement_Vergleich_2025.xlsx"
     termine_file = r"D:\App_DGM\daten\termine.json"
     nennungen_fahrer_file = r"D:\App_DGM\daten\nennungen_fahrer.json"
     ABNAHMEN_ROOT = r"Abnahmen"
@@ -69,7 +75,6 @@ def show():
                 "fahrzeug": "Fahrzeug",
                 "verein": "Verein"
             }
-
             df_local = df_local.rename(columns=rename_map)
 
             for c in ["Vorname", "Nachname", "Startnummer", "Klasse", "Lizenz", "Fahrzeug", "Verein", "Abnahme_Historie"]:
@@ -91,6 +96,174 @@ def show():
     df = load_stammdaten()
 
     # --------------------
+    # Reglement laden
+    # --------------------
+    if os.path.exists(reglement_file):
+        try:
+            reglement_df = pd.read_excel(reglement_file, sheet_name=0)
+            reglement_df.columns = reglement_df.columns.astype(str).str.strip()
+        except Exception as e:
+            st.error(f"Fehler beim Einlesen der Reglement-Datei: {e}")
+            reglement_df = None
+    else:
+        st.warning("Reglement-Datei nicht gefunden.")
+        reglement_df = None
+
+    # --------------------
+    # Klassenfarben
+    # --------------------
+    klassen_farben = {
+        "Original": "#1E90FF",
+        "Standard": "#FFFFFF",
+        "Modified": "#FFD700",
+        "ProModified": "#000000",
+        "Prototype": "#FF4B4B",
+        "Junior-Cup": "#8A2BE2",
+        "Fun-Cup": "#00C853",
+        "Offene Klasse": "#FF8C00"
+    }
+
+    def anzeigen_klassenbalken(klasse):
+        farbe = klassen_farben.get(str(klasse).strip(), "#CCCCCC")
+        rahmenfarbe = "#D3D3D3" if farbe == "#FFFFFF" else farbe
+        textfarbe = "black" if farbe == "#FFFFFF" else "white"
+        st.markdown(
+            f"""
+            <div style="height:40px;background-color:{farbe};border:2px solid {rahmenfarbe};
+            border-radius:8px;margin-bottom:10px;text-align:center;line-height:40px;
+            font-weight:bold;color:{textfarbe};">
+                {str(klasse).upper() if klasse else 'KLASSE UNBEKANNT'}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    def zeige_fahrer_info(fahrer):
+        with st.expander("Fahrerinformationen", expanded=True):
+            st.write(f"**Vorname:** {fahrer.get('Vorname', '')}")
+            st.write(f"**Nachname:** {fahrer.get('Nachname', '')}")
+            st.write(f"**Startnummer:** {fahrer.get('Startnummer', '')}")
+            st.write(f"**Klasse:** {fahrer.get('Klasse', '')}")
+            st.write(f"**Fahrzeug:** {fahrer.get('Fahrzeug', '')}")
+            liz = str(fahrer.get("Lizenz", "")).strip().lower()
+            st.write(f"**Lizenz:** {'Ja' if liz in ['true', '1', 'yes', 'ja'] else 'Nein'}")
+            st.write(f"**Verein:** {fahrer.get('Verein', '')}")
+
+    # --------------------
+    # Suche & Auswahl
+    # --------------------
+    def suche_und_waehle_fahrer(df_local, suchbegriff, key_prefix):
+        if suchbegriff:
+            search_clean = str(suchbegriff).strip()
+
+            treffer = df_local[
+                df_local["Vorname"].astype(str).str.strip().str.contains(search_clean, case=False, na=False) |
+                df_local["Nachname"].astype(str).str.strip().str.contains(search_clean, case=False, na=False) |
+                df_local["Startnummer"].astype(str).str.strip().str.contains(search_clean, case=False, na=False)
+            ]
+
+            if not treffer.empty:
+                options = [
+                    f"{r['Vorname']} {r['Nachname']} ({r['Klasse']}) [#{r['Startnummer']}]"
+                    for _, r in treffer.iterrows()
+                ]
+                selected_opt = st.selectbox("Fahrer auswählen:", options, key=f"{key_prefix}_select")
+                startnr = selected_opt.split("#")[-1].strip("]").strip()
+                klasse = selected_opt.split("(")[-1].split(")")[0]
+
+                fahrer_row = df_local[
+                    (df_local["Startnummer"].astype(str).str.strip() == str(startnr).strip()) &
+                    (df_local["Klasse"].astype(str).str.strip() == klasse.strip())
+                ].iloc[0]
+
+                fahrer = fahrer_row.to_dict()
+                st.session_state["selected_fahrer"] = fahrer
+                anzeigen_klassenbalken(fahrer.get("Klasse", ""))
+                zeige_fahrer_info(fahrer)
+                return fahrer
+            else:
+                st.warning("Kein Fahrer gefunden.")
+        return None
+
+    # --------------------
+    # PDF / Excel Export
+    # --------------------
+    styles_global = getSampleStyleSheet()
+
+    def pdf_fahrer(fahrer_info, abnahmen_list):
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        elements = []
+        elements.append(
+            Paragraph(
+                f"Abnahmehistorie: {fahrer_info.get('Vorname','')} {fahrer_info.get('Nachname','')}",
+                styles_global["Heading2"]
+            )
+        )
+        elements.append(Spacer(1, 8))
+
+        for abnahme_data in abnahmen_list:
+            elements.append(
+                Paragraph(
+                    f"{abnahme_data.get('Datum','')} – {abnahme_data.get('Typ','')}",
+                    styles_global["Heading3"]
+                )
+            )
+            elements.append(
+                Paragraph(
+                    f"Abnehmende Person: {abnahme_data.get('Unterschrift','–')}",
+                    styles_global["Normal"]
+                )
+            )
+            for bauteil, daten in abnahme_data.get("Ergebnisse", {}).items():
+                elements.append(
+                    Paragraph(
+                        f"{bauteil} – {daten.get('Status','')}",
+                        styles_global["Normal"]
+                    )
+                )
+                if daten.get("Bemerkung"):
+                    elements.append(
+                        Paragraph(
+                            f"Bemerkung: {daten.get('Bemerkung','')}",
+                            styles_global["Normal"]
+                        )
+                    )
+            elements.append(Spacer(1, 10))
+
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer
+
+    def excel_fahrer(fahrer_info, abnahmen_list):
+        rows = []
+        for abnahme_data in abnahmen_list:
+            datum = abnahme_data.get("Datum", "")
+            abn_typ = abnahme_data.get("Typ", "")
+            unterschrift = abnahme_data.get("Unterschrift", "–")
+
+            for bauteil, daten in abnahme_data.get("Ergebnisse", {}).items():
+                rows.append({
+                    "Vorname": fahrer_info.get("Vorname", ""),
+                    "Nachname": fahrer_info.get("Nachname", ""),
+                    "Startnummer": fahrer_info.get("Startnummer", ""),
+                    "Klasse": fahrer_info.get("Klasse", ""),
+                    "Datum": datum,
+                    "Typ": abn_typ,
+                    "Abnehmende Person": unterschrift,
+                    "Bauteil": bauteil,
+                    "Status": daten.get("Status", ""),
+                    "Bemerkung": daten.get("Bemerkung", "")
+                })
+
+        df_out = pd.DataFrame(rows)
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            df_out.to_excel(writer, index=False, sheet_name="Historie")
+        buffer.seek(0)
+        return buffer
+
+    # --------------------
     # Abnahmen scannen + letzte Abnahme pro Startnr/Jahr/Klasse
     # --------------------
     def parse_dt(datum_str: str):
@@ -102,11 +275,7 @@ def show():
                 return datetime.strptime(s, fmt)
             except Exception:
                 pass
-        try:
-            s2 = s.replace("_", " ").replace("-", ":")
-            return datetime.strptime(s2, "%d.%m.%Y %H:%M:%S")
-        except Exception:
-            return None
+        return None
 
     def hat_maengel(abn: dict) -> bool:
         for b in (abn.get("Ergebnisse", {}) or {}).values():
@@ -166,11 +335,8 @@ def show():
         latest = {}
         for r in rows:
             key = (r["Startnummer"], r["Jahr"], r.get("Klasse", ""))
-            if key not in latest:
+            if key not in latest or (r.get("_dt") or datetime.min) > (latest[key].get("_dt") or datetime.min):
                 latest[key] = r
-            else:
-                if (r.get("_dt") or datetime.min) > (latest[key].get("_dt") or datetime.min):
-                    latest[key] = r
 
         out = list(latest.values())
         for r in out:
@@ -178,7 +344,7 @@ def show():
         return out
 
     # --------------------
-    # Termine / Lauf-Filter
+    # Lauf-Filter
     # --------------------
     def load_termine_options():
         termine = load_json(termine_file, default=[])
@@ -196,7 +362,7 @@ def show():
         return [x for x in data if str(x.get("lauf", "")).strip() == str(lauf_str).strip()]
 
     # --------------------
-    # Tabs je nach Rolle
+    # Tabs
     # --------------------
     if role in ["admin", "admin2", "abnahme"]:
         tabs = st.tabs(["🔧 Fahrzeugabnahme", "📚 Historie", "📅 Jahresübersicht"])
@@ -208,91 +374,225 @@ def show():
         tab_hist = None
 
     # ==========================
-    # Fahrzeugabnahme
+    # TAB 1: Fahrzeugabnahme
     # ==========================
     if role in ["admin", "admin2", "abnahme"]:
         with tab_abnahme:
-            st.header("🔧 Fahrzeugabnahme durchführen")
+            st.header("🛠️ Fahrzeugabnahme durchführen")
 
-            search = st.text_input(
-                "Fahrer suchen (Vorname, Nachname, Startnummer)",
-                key="abn_search"
+            fahrer = suche_und_waehle_fahrer(
+                df,
+                st.text_input(
+                    "Fahrer suchen (Vorname, Nachname oder Startnummer):",
+                    key="abnahme_suche"
+                ),
+                "abnahme"
             )
 
-            if search:
-                search_clean = str(search).strip()
+            if fahrer:
+                startnr = fahrer["Startnummer"]
+                klasse = fahrer["Klasse"]
+                ergebnisse = {}
+                bestanden = True
 
-                res = df[
-                    df["Vorname"].astype(str).str.strip().str.contains(search_clean, case=False, na=False) |
-                    df["Nachname"].astype(str).str.strip().str.contains(search_clean, case=False, na=False) |
-                    df["Startnummer"].astype(str).str.strip().str.contains(search_clean, case=False, na=False)
-                ]
+                # Reglement je Klasse laden
+                if reglement_df is not None:
+                    klassen_spalten = [
+                        c for c in reglement_df.columns
+                        if str(c).strip().lower() == str(klasse).strip().lower()
+                    ]
 
-                if res.empty:
-                    st.warning("Kein Fahrer gefunden.")
+                    if klassen_spalten:
+                        spalte = klassen_spalten[0]
+                        if "Punkt/Bauteil" in reglement_df.columns:
+                            punkte_df = reglement_df[["Punkt/Bauteil", spalte]].dropna(subset=["Punkt/Bauteil"])
+                            punkte_df.columns = ["Bauteil", "Beschreibung"]
+                        else:
+                            st.error("Die Reglement-Datei muss eine Spalte 'Punkt/Bauteil' enthalten.")
+                            punkte_df = pd.DataFrame({"Bauteil": [], "Beschreibung": []})
+                    else:
+                        st.warning(f"Keine Reglement-Spalte für Klasse '{klasse}' gefunden.")
+                        punkte_df = pd.DataFrame({"Bauteil": [], "Beschreibung": []})
                 else:
-                    sel = st.selectbox(
-                        "Fahrer auswählen",
-                        res.apply(lambda x: f"{x['Vorname']} {x['Nachname']} #{x['Startnummer']} ({x['Klasse']})", axis=1),
-                        key="abn_sel"
-                    )
+                    st.warning("Keine Reglement-Datei gefunden.")
+                    punkte_df = pd.DataFrame({"Bauteil": [], "Beschreibung": []})
 
-                    startnr = sel.split("#")[1].split(" ")[0].strip()
-                    fahrer = df[df["Startnummer"] == startnr].iloc[0]
+                # Prüfpunkte anzeigen
+                for _, row in punkte_df.iterrows():
+                    bauteil = str(row["Bauteil"])
+                    beschreibung = str(row["Beschreibung"])
 
-                    st.markdown("### Stammdaten")
-                    st.write(f"**Vorname:** {fahrer.get('Vorname', '')}")
-                    st.write(f"**Nachname:** {fahrer.get('Nachname', '')}")
-                    st.write(f"**Startnummer:** {fahrer.get('Startnummer', '')}")
-                    st.write(f"**Klasse:** {fahrer.get('Klasse', '')}")
-                    st.write(f"**Fahrzeug:** {fahrer.get('Fahrzeug', '')}")
-                    st.write(f"**Verein:** {fahrer.get('Verein', '')}")
+                    with st.expander(f"{bauteil}", expanded=True):
+                        st.markdown(
+                            f"<div style='background:#f5f5f5;padding:8px;border-radius:6px;'>{beschreibung}</div>",
+                            unsafe_allow_html=True
+                        )
 
-                    unterschrift = st.text_input(
-                        "Unterschrift (Abnehmende Person)",
-                        value=st.session_state.get("username", ""),
-                        key="abn_sign"
-                    )
+                        status = st.radio(
+                            f"Ist {bauteil} in Ordnung?",
+                            ["Erfüllt", "Mangel vorhanden"],
+                            key=f"status_{bauteil}_{klasse}_{startnr}",
+                            horizontal=True
+                        )
 
-                    typ_sel = st.selectbox(
-                        "Abnahme-Typ",
-                        ["Jahresabnahme", "Tagesabnahme"],
-                        index=0,
-                        key="abn_typ"
-                    )
+                        bemerkung = st.text_area(
+                            f"Bemerkung zu {bauteil}",
+                            key=f"bem_{bauteil}_{klasse}_{startnr}",
+                            height=60
+                        )
 
-                    if st.button("💾 Abnahme speichern", key="abn_save"):
-                        now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-                        folder = os.path.join(ABNAHMEN_ROOT, startnr)
-                        os.makedirs(folder, exist_ok=True)
+                        bilder = st.file_uploader(
+                            f"Bilder zu {bauteil} hochladen",
+                            accept_multiple_files=True,
+                            type=["png", "jpg", "jpeg"],
+                            key=f"bilder_{bauteil}_{klasse}_{startnr}"
+                        )
 
-                        data = {
-                            "Datum": now,
-                            "Typ": typ_sel,
-                            "Klasse": fahrer.get("Klasse", ""),
-                            "Unterschrift": unterschrift,
-                            "Ergebnisse": {}
+                        b64_list = []
+                        if bilder:
+                            for b in bilder:
+                                b64_list.append(base64.b64encode(b.read()).decode())
+
+                        if status != "Erfüllt":
+                            bestanden = False
+
+                        ergebnisse[bauteil] = {
+                            "Status": status,
+                            "Bemerkung": bemerkung,
+                            "Bilder": b64_list
                         }
 
-                        filename = os.path.join(
-                            folder,
-                            now.replace(":", "-").replace(" ", "_") + ".json"
-                        )
-                        with open(filename, "w", encoding="utf-8") as f:
-                            json.dump(data, f, indent=2, ensure_ascii=False)
+                lizenz_hat = str(fahrer.get("Lizenz", "")).strip().lower() in ["true", "1", "yes", "ja"]
+                abnahme_typ = "Tagesabnahme" if not (lizenz_hat and bestanden) else "Jahresabnahme"
 
-                        st.success("✅ Abnahme gespeichert.")
+                st.markdown("---")
+                st.subheader("📋 Abnahmeergebnis")
+                if abnahme_typ == "Jahresabnahme":
+                    st.success("✅ Fahrer erfüllt alle Bedingungen – Jahresabnahme erteilt!")
+                else:
+                    st.warning("⚠️ Fahrer erhält nur eine Tagesabnahme.")
+
+                unterschrift = st.text_input(
+                    "Technischer Vorstand / Abnehmende Person:",
+                    value=st.session_state.get("username", ""),
+                    key="abn_unterschrift"
+                )
+
+                if st.button("💾 Abnahme speichern", key="save_abnahme"):
+                    os.makedirs(f"{ABNAHMEN_ROOT}/{startnr}", exist_ok=True)
+                    datum_now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+
+                    daten = {
+                        "Datum": datum_now,
+                        "Typ": abnahme_typ,
+                        "Ergebnisse": ergebnisse,
+                        "Unterschrift": unterschrift,
+                        "Klasse": klasse
+                    }
+
+                    filename = f"{ABNAHMEN_ROOT}/{startnr}/{datum_now.replace(':','-').replace(' ','_')}.json"
+                    with open(filename, "w", encoding="utf-8") as f:
+                        json.dump(daten, f, ensure_ascii=False, indent=2)
+
+                    st.success(f"✅ Abnahme gespeichert ({abnahme_typ})")
+                    st.balloons()
 
     # ==========================
-    # Historie
+    # TAB 2: Historie
     # ==========================
     if role in ["admin", "admin2", "abnahme"]:
         with tab_hist:
-            st.header("📚 Historie / Stammdaten")
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.header("📜 Abnahmehistorie & Exporte")
+
+            fahrer = suche_und_waehle_fahrer(
+                df,
+                st.text_input("Fahrer suchen (Historie):", key="hist_suche"),
+                "hist"
+            )
+
+            if fahrer:
+                startnr = fahrer["Startnummer"]
+                klasse = fahrer["Klasse"]
+                abnahme_dir = f"{ABNAHMEN_ROOT}/{startnr}"
+                abnahmen_list = []
+
+                if os.path.exists(abnahme_dir):
+                    for jfile in sorted(os.listdir(abnahme_dir)):
+                        if jfile.endswith(".json"):
+                            try:
+                                with open(os.path.join(abnahme_dir, jfile), "r", encoding="utf-8") as f:
+                                    abnahme_data = json.load(f)
+                                    if abnahme_data.get("Klasse") == klasse:
+                                        abnahmen_list.append(abnahme_data)
+                            except Exception:
+                                continue
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.download_button(
+                        "📄 PDF dieser Abnahmen",
+                        pdf_fahrer(fahrer, abnahmen_list),
+                        file_name=f"{fahrer['Vorname']}_{fahrer['Nachname']}.pdf",
+                        mime="application/pdf"
+                    )
+
+                with col2:
+                    st.download_button(
+                        "📊 Excel dieser Abnahmen",
+                        excel_fahrer(fahrer, abnahmen_list),
+                        file_name=f"{fahrer['Vorname']}_{fahrer['Nachname']}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+
+                st.markdown("---")
+
+                if not abnahmen_list:
+                    st.info("Keine Abnahmen für diesen Fahrer vorhanden.")
+                else:
+                    for abnahme_data in sorted(
+                        abnahmen_list,
+                        key=lambda x: x.get("Datum", ""),
+                        reverse=True
+                    ):
+                        label = f"{abnahme_data.get('Datum','')} – {abnahme_data.get('Typ','')}"
+                        ergebnisse = abnahme_data.get("Ergebnisse", {})
+                        hat_maengel_local = any(
+                            d.get("Status") == "Mangel vorhanden"
+                            for d in (ergebnisse or {}).values()
+                        )
+
+                        if abnahme_data.get("Typ") == "Jahresabnahme" and not hat_maengel_local:
+                            farbe = "#4CAF50"
+                        elif abnahme_data.get("Typ") == "Tagesabnahme" and hat_maengel_local:
+                            farbe = "#FF9800"
+                        else:
+                            farbe = "#F44336"
+
+                        with st.expander(label, expanded=False):
+                            st.markdown(
+                                f"<div style='background-color:{farbe}; padding:10px; border-radius:8px; color:white;'>",
+                                unsafe_allow_html=True
+                            )
+                            st.markdown(f"**🧾 Abnehmende Person:** {abnahme_data.get('Unterschrift', '–')}")
+                            st.markdown(f"**📋 Abnahme-Typ:** {abnahme_data.get('Typ', '–')}")
+                            st.markdown(f"**🚘 Klasse:** {abnahme_data.get('Klasse', '–')}")
+                            st.markdown("---")
+
+                            for bauteil, daten in (ergebnisse or {}).items():
+                                st.markdown(f"🔧 **{bauteil}** – {daten.get('Status', '')}")
+                                if daten.get("Bemerkung"):
+                                    st.markdown(f"🗒️ _{daten.get('Bemerkung', '')}_")
+                                if daten.get("Bilder"):
+                                    for b64img in daten.get("Bilder"):
+                                        try:
+                                            st.image(base64.b64decode(b64img), width=200)
+                                        except Exception:
+                                            st.text("Bild konnte nicht angezeigt werden.")
+
+                            st.markdown("</div>", unsafe_allow_html=True)
 
     # ==========================
-    # Jahresübersicht
+    # TAB 3: Jahresübersicht
     # ==========================
     with tab_jahr:
         st.header("📅 Jahresübersicht: Filter & Übersicht")
