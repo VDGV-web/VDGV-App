@@ -1,4 +1,4 @@
-Datei: D:\App_DGM\seiten\fahrzeugabnahme.py
+# Datei: D:\App_DGM\seiten\fahrzeugabnahme.py
 
 import streamlit as st
 import pandas as pd
@@ -16,6 +16,7 @@ from supabase_client import get_supabase
 
 def show():
     st.error("DEBUG: fahrzeugabnahme.py wird geladen")
+
     # --------------------
     # Rollenprüfung
     # --------------------
@@ -33,17 +34,6 @@ def show():
         pass
 
     # --------------------
-    # Kopfbereich
-    # --------------------
-    col_logo, col_title = st.columns([1, 5])
-    with col_logo:
-        logo_path = r"D:\App_DGM\VDGV_Logo.png"
-        if os.path.exists(logo_path):
-            st.image(logo_path, width=120)
-    with col_title:
-        st.title("Deutsche Geländewagen Meisterschaft – Fahrzeugabnahme DGM")
-
-    # --------------------
     # Pfade
     # --------------------
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -52,10 +42,21 @@ def show():
     termine_file = os.path.join(BASE_DIR, "daten", "termine.json")
     nennungen_fahrer_file = os.path.join(BASE_DIR, "daten", "nennungen_fahrer.json")
     ABNAHMEN_ROOT = os.path.join(BASE_DIR, "Abnahmen")
+    logo_path = os.path.join(BASE_DIR, "VDGV_Logo.png")
 
- st.write("BASE_DIR:", BASE_DIR)
+    st.write("BASE_DIR:", BASE_DIR)
     st.write("Reglement-Datei:", reglement_file)
     st.write("Reglement gefunden:", os.path.exists(reglement_file))
+
+    # --------------------
+    # Kopfbereich
+    # --------------------
+    col_logo, col_title = st.columns([1, 5])
+    with col_logo:
+        if os.path.exists(logo_path):
+            st.image(logo_path, width=120)
+    with col_title:
+        st.title("Deutsche Geländewagen Meisterschaft – Fahrzeugabnahme DGM")
 
     # --------------------
     # Helper: JSON
@@ -594,7 +595,7 @@ def show():
                             }
 
                             if save_new_fahrer_supabase(neuer_fahrer):
-                                os.makedirs(f"{ABNAHMEN_ROOT}/{startnummer}", exist_ok=True)
+                                os.makedirs(os.path.join(ABNAHMEN_ROOT, str(startnummer)), exist_ok=True)
                                 st.success(
                                     f"✅ Neuer Fahrer '{vorname} {nachname}' in Klasse '{klasse}' gespeichert!"
                                 )
@@ -706,7 +707,7 @@ def show():
                 )
 
                 if st.button("💾 Abnahme speichern", key="save_abnahme"):
-                    os.makedirs(f"{ABNAHMEN_ROOT}/{startnr}", exist_ok=True)
+                    os.makedirs(os.path.join(ABNAHMEN_ROOT, str(startnr)), exist_ok=True)
                     datum_now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
 
                     daten = {
@@ -717,7 +718,11 @@ def show():
                         "Klasse": klasse
                     }
 
-                    filename = f"{ABNAHMEN_ROOT}/{startnr}/{datum_now.replace(':', '-').replace(' ', '_')}.json"
+                    filename = os.path.join(
+                        ABNAHMEN_ROOT,
+                        str(startnr),
+                        f"{datum_now.replace(':', '-').replace(' ', '_')}.json"
+                    )
                     with open(filename, "w", encoding="utf-8") as f:
                         json.dump(daten, f, ensure_ascii=False, indent=2)
 
@@ -748,7 +753,7 @@ def show():
             if fahrer:
                 startnr = fahrer["Startnummer"]
                 klasse = fahrer["Klasse"]
-                abnahme_dir = f"{ABNAHMEN_ROOT}/{startnr}"
+                abnahme_dir = os.path.join(ABNAHMEN_ROOT, str(startnr))
                 abnahmen_list = []
 
                 if os.path.exists(abnahme_dir):
