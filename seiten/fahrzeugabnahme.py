@@ -15,8 +15,7 @@ from supabase_client import get_supabase
 
 
 def show():
-    st.error("DEBUG: fahrzeugabnahme.py wird geladen")
-
+   
     # --------------------
     # Rollenprüfung
     # --------------------
@@ -43,10 +42,6 @@ def show():
     nennungen_fahrer_file = os.path.join(BASE_DIR, "daten", "nennungen_fahrer.json")
     ABNAHMEN_ROOT = os.path.join(BASE_DIR, "Abnahmen")
     logo_path = os.path.join(BASE_DIR, "VDGV_Logo.png")
-
-    st.write("BASE_DIR:", BASE_DIR)
-    st.write("Reglement-Datei:", reglement_file)
-    st.write("Reglement gefunden:", os.path.exists(reglement_file))
 
     # --------------------
     # Kopfbereich
