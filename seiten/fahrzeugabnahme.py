@@ -15,7 +15,6 @@ from supabase_client import get_supabase
 
 
 def show():
-   
     # --------------------
     # Rollenprüfung
     # --------------------
@@ -618,7 +617,6 @@ def show():
                 ergebnisse = {}
                 bestanden = True
 
-                # Reglement je Klasse laden
                 if reglement_df is not None:
                     klassen_spalten = [
                         c for c in reglement_df.columns
@@ -640,7 +638,6 @@ def show():
                     st.warning("Keine Reglement-Datei gefunden.")
                     punkte_df = pd.DataFrame({"Bauteil": [], "Beschreibung": []})
 
-                # Prüfpunkte anzeigen
                 for _, row in punkte_df.iterrows():
                     bauteil = str(row["Bauteil"])
                     beschreibung = str(row["Beschreibung"])
