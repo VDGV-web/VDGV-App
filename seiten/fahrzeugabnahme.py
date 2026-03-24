@@ -45,10 +45,16 @@ def show():
     # --------------------
     # Pfade
     # --------------------
-    reglement_file = r"D:\App_DGM\daten\VDGV_Reglement_Vergleich_2025.xlsx"
-    termine_file = r"D:\App_DGM\daten\termine.json"
-    nennungen_fahrer_file = r"D:\App_DGM\daten\nennungen_fahrer.json"
-    ABNAHMEN_ROOT = r"Abnahmen"
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    reglement_file = os.path.join(BASE_DIR, "daten", "VDGV_Reglement_Vergleich_2025.xlsx")
+    termine_file = os.path.join(BASE_DIR, "daten", "termine.json")
+    nennungen_fahrer_file = os.path.join(BASE_DIR, "daten", "nennungen_fahrer.json")
+    ABNAHMEN_ROOT = os.path.join(BASE_DIR, "Abnahmen")
+
+ st.write("BASE_DIR:", BASE_DIR)
+    st.write("Reglement-Datei:", reglement_file)
+    st.write("Reglement gefunden:", os.path.exists(reglement_file))
 
     # --------------------
     # Helper: JSON
