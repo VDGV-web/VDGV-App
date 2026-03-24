@@ -26,8 +26,21 @@ def show():
     # --------------------
     # Seiteneinstellungen
     # --------------------
-    st.set_page_config(page_title="Fahrzeugabnahme DGM", layout="wide")
-    st.title("Deutsche Geländewagen Meisterschaft – Fahrzeugabnahme DGM")
+    try:
+        st.set_page_config(page_title="Fahrzeugabnahme DGM", layout="wide")
+    except Exception:
+        pass
+
+    # --------------------
+    # Kopfbereich
+    # --------------------
+    col_logo, col_title = st.columns([1, 5])
+    with col_logo:
+        logo_path = r"D:\App_DGM\VDGV_Logo.png"
+        if os.path.exists(logo_path):
+            st.image(logo_path, width=120)
+    with col_title:
+        st.title("Deutsche Geländewagen Meisterschaft – Fahrzeugabnahme DGM")
 
     # --------------------
     # Pfade
@@ -73,18 +86,22 @@ def show():
                 "klasse": "Klasse",
                 "lizenz": "Lizenz",
                 "fahrzeug": "Fahrzeug",
-                "verein": "Verein"
+                "verein": "Verein",
+                "abnahme_historie": "Abnahme_Historie"
             }
             df_local = df_local.rename(columns=rename_map)
 
-            for c in ["Vorname", "Nachname", "Startnummer", "Klasse", "Lizenz", "Fahrzeug", "Verein", "Abnahme_Historie"]:
+            for c in [
+                "Vorname", "Nachname", "Startnummer", "Klasse",
+                "Lizenz", "Fahrzeug", "Verein", "Abnahme_Historie"
+            ]:
                 if c not in df_local.columns:
                     df_local[c] = ""
 
             for c in df_local.columns:
                 df_local[c] = df_local[c].astype(str).str.strip()
 
-            return df_local
+            return df_local.reset_index(drop=True)
 
         except Exception as e:
             st.error(f"Fehler beim Laden der Stammdaten aus Supabase: {e}")
@@ -92,6 +109,74 @@ def show():
                 "Vorname", "Nachname", "Startnummer", "Klasse",
                 "Lizenz", "Fahrzeug", "Verein", "Abnahme_Historie"
             ])
+
+    def next_free_startnummer(df_local):
+        try:
+            nums = pd.to_numeric(
+                df_local["Startnummer"].astype(str).replace("", pd.NA),
+                errors="coerce"
+            ).dropna().astype(int)
+            return int(nums.max() + 1) if not nums.empty else 1
+        except Exception:
+            return 1
+
+    def save_new_fahrer_supabase(neuer_fahrer: dict):
+        try:
+            sb = get_supabase()
+            payload = {
+                "vorname": str(neuer_fahrer.get("Vorname", "")).strip(),
+                "nachname": str(neuer_fahrer.get("Nachname", "")).strip(),
+                "startnummer": str(neuer_fahrer.get("Startnummer", "")).strip(),
+                "klasse": str(neuer_fahrer.get("Klasse", "")).strip(),
+                "lizenz": str(neuer_fahrer.get("Lizenz", "")).strip().lower() in ["true", "1", "yes", "ja"],
+                "fahrzeug": str(neuer_fahrer.get("Fahrzeug", "")).strip(),
+                "verein": str(neuer_fahrer.get("Verein", "")).strip(),
+                "abnahme_historie": str(neuer_fahrer.get("Abnahme_Historie", "")).strip()
+            }
+            sb.table("fahrer").insert(payload).execute()
+            return True
+        except Exception as e:
+            st.error(f"Fehler beim Speichern des Fahrers in Supabase: {e}")
+            return False
+
+    def update_abnahme_historie_supabase(startnr, klasse, neuer_eintrag):
+        try:
+            sb = get_supabase()
+
+            response = (
+                sb.table("fahrer")
+                .select("abnahme_historie,startnummer,klasse")
+                .eq("startnummer", str(startnr).strip())
+                .eq("klasse", str(klasse).strip())
+                .limit(1)
+                .execute()
+            )
+
+            data = response.data if response.data else []
+
+            if data:
+                alter_hist = str(data[0].get("abnahme_historie", "") or "").strip()
+
+                if not alter_hist:
+                    neue_hist = neuer_eintrag
+                else:
+                    neue_hist = f"{alter_hist} | {neuer_eintrag}"
+
+                (
+                    sb.table("fahrer")
+                    .update({"abnahme_historie": neue_hist})
+                    .eq("startnummer", str(startnr).strip())
+                    .eq("klasse", str(klasse).strip())
+                    .execute()
+                )
+            else:
+                st.warning(
+                    f"Kein Fahrer-Datensatz für Startnummer {startnr} / Klasse {klasse} in Supabase gefunden. "
+                    "Abnahme wurde als JSON gespeichert, Historie konnte aber nicht aktualisiert werden."
+                )
+
+        except Exception as e:
+            st.error(f"Fehler beim Aktualisieren der Abnahme-Historie in Supabase: {e}")
 
     df = load_stammdaten()
 
@@ -147,10 +232,12 @@ def show():
             st.write(f"**Fahrzeug:** {fahrer.get('Fahrzeug', '')}")
             liz = str(fahrer.get("Lizenz", "")).strip().lower()
             st.write(f"**Lizenz:** {'Ja' if liz in ['true', '1', 'yes', 'ja'] else 'Nein'}")
-            st.write(f"**Verein:** {fahrer.get('Verein', '')}")
+            st.write(f"**Verein:** {fahrer.get('Verein', 'Keine Angabe')}")
+            hist = str(fahrer.get("Abnahme_Historie", "")).strip()
+            st.write(f"**Abnahme-Historie:** {hist if hist else 'Keine'}")
 
     # --------------------
-    # Suche & Auswahl
+    # Fahrer suchen & auswählen
     # --------------------
     def suche_und_waehle_fahrer(df_local, suchbegriff, key_prefix):
         if suchbegriff:
@@ -168,12 +255,13 @@ def show():
                     for _, r in treffer.iterrows()
                 ]
                 selected_opt = st.selectbox("Fahrer auswählen:", options, key=f"{key_prefix}_select")
+
                 startnr = selected_opt.split("#")[-1].strip("]").strip()
-                klasse = selected_opt.split("(")[-1].split(")")[0]
+                klasse = selected_opt.split("(")[-1].split(")")[0].strip()
 
                 fahrer_row = df_local[
                     (df_local["Startnummer"].astype(str).str.strip() == str(startnr).strip()) &
-                    (df_local["Klasse"].astype(str).str.strip() == klasse.strip())
+                    (df_local["Klasse"].astype(str).str.strip() == klasse)
                 ].iloc[0]
 
                 fahrer = fahrer_row.to_dict()
@@ -196,7 +284,7 @@ def show():
         elements = []
         elements.append(
             Paragraph(
-                f"Abnahmehistorie: {fahrer_info.get('Vorname','')} {fahrer_info.get('Nachname','')}",
+                f"Abnahmehistorie: {fahrer_info.get('Vorname', '')} {fahrer_info.get('Nachname', '')}",
                 styles_global["Heading2"]
             )
         )
@@ -205,27 +293,27 @@ def show():
         for abnahme_data in abnahmen_list:
             elements.append(
                 Paragraph(
-                    f"{abnahme_data.get('Datum','')} – {abnahme_data.get('Typ','')}",
+                    f"{abnahme_data.get('Datum', '')} – {abnahme_data.get('Typ', '')}",
                     styles_global["Heading3"]
                 )
             )
             elements.append(
                 Paragraph(
-                    f"Abnehmende Person: {abnahme_data.get('Unterschrift','–')}",
+                    f"Abnehmende Person: {abnahme_data.get('Unterschrift', '–')}",
                     styles_global["Normal"]
                 )
             )
             for bauteil, daten in abnahme_data.get("Ergebnisse", {}).items():
                 elements.append(
                     Paragraph(
-                        f"{bauteil} – {daten.get('Status','')}",
+                        f"{bauteil} – {daten.get('Status', '')}",
                         styles_global["Normal"]
                     )
                 )
                 if daten.get("Bemerkung"):
                     elements.append(
                         Paragraph(
-                            f"Bemerkung: {daten.get('Bemerkung','')}",
+                            f"Bemerkung: {daten.get('Bemerkung', '')}",
                             styles_global["Normal"]
                         )
                     )
@@ -262,6 +350,62 @@ def show():
             df_out.to_excel(writer, index=False, sheet_name="Historie")
         buffer.seek(0)
         return buffer
+
+    def pdf_alle_fahrer(df_all):
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        elements = []
+
+        data_all = [["Vorname", "Nachname", "Startnummer", "Klasse", "Letzte Abnahme"]]
+        for _, row in df_all.iterrows():
+            letzte = row.get("Abnahme_Historie", "Keine")
+            if pd.isna(letzte) or str(letzte).strip() == "":
+                letzte = "Keine"
+
+            data_all.append([
+                str(row.get("Vorname", "")),
+                str(row.get("Nachname", "")),
+                str(row.get("Startnummer", "")),
+                str(row.get("Klasse", "")),
+                str(letzte)
+            ])
+
+        t_all = Table(data_all, colWidths=[80, 80, 60, 80, 200])
+        t_all.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.lightblue),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold")
+        ]))
+
+        elements.append(t_all)
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer
+
+    def excel_alle_fahrer(df_all):
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            df_all.to_excel(writer, index=False, sheet_name="Alle_Fahrer")
+        buffer.seek(0)
+        return buffer
+
+    # --------------------
+    # Sidebar Exporte
+    # --------------------
+    if role in ["admin", "admin2", "abnahme"]:
+        st.sidebar.header("📤 Exporte")
+        st.sidebar.download_button(
+            "📄 PDF aller Fahrer",
+            pdf_alle_fahrer(df),
+            file_name="Alle_Fahrer.pdf",
+            mime="application/pdf"
+        )
+        st.sidebar.download_button(
+            "📊 Excel aller Fahrer",
+            excel_alle_fahrer(df),
+            file_name="Alle_Fahrer.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
     # --------------------
     # Abnahmen scannen + letzte Abnahme pro Startnr/Jahr/Klasse
@@ -365,16 +509,92 @@ def show():
     # Tabs
     # --------------------
     if role in ["admin", "admin2", "abnahme"]:
-        tabs = st.tabs(["🔧 Fahrzeugabnahme", "📚 Historie", "📅 Jahresübersicht"])
-        tab_abnahme, tab_hist, tab_jahr = tabs
+        tabs = st.tabs(["🏁 Startseite", "🔧 Fahrzeugabnahme", "📚 Historie", "📅 Jahresübersicht"])
+        tab_start, tab_abnahme, tab_hist, tab_jahr = tabs
     else:
         tabs = st.tabs(["📅 Jahresübersicht"])
         tab_jahr = tabs[0]
+        tab_start = None
         tab_abnahme = None
         tab_hist = None
 
     # ==========================
-    # TAB 1: Fahrzeugabnahme
+    # TAB 1: Startseite
+    # ==========================
+    if role in ["admin", "admin2", "abnahme"]:
+        with tab_start:
+            st.header("🔍 Fahrersuche & Übersicht")
+
+            fahrer = suche_und_waehle_fahrer(
+                df,
+                st.text_input("Vorname, Nachname oder Startnummer eingeben:", key="start_suche"),
+                "start"
+            )
+
+            if not fahrer:
+                st.dataframe(df, use_container_width=True, hide_index=True)
+
+                st.markdown("---")
+                st.subheader("➕ Neuen Fahrer anlegen")
+
+                with st.form("neuer_fahrer_form"):
+                    col1, col2, col3 = st.columns(3)
+
+                    with col1:
+                        vorname = st.text_input("Vorname")
+                        nachname = st.text_input("Nachname")
+
+                    with col2:
+                        klasse = st.selectbox("Klasse", list(klassen_farben.keys()))
+                        startnummer = st.number_input(
+                            "Startnummer",
+                            min_value=1,
+                            value=next_free_startnummer(df),
+                            step=1
+                        )
+
+                    with col3:
+                        fahrzeug = st.text_input("Fahrzeug")
+                        verein = st.text_input("Verein")
+                        lizenz = st.checkbox("Lizenz vorhanden?")
+
+                    submitted = st.form_submit_button("🚀 Fahrer speichern")
+
+                    if submitted:
+                        if not vorname.strip() or not nachname.strip():
+                            st.error("Bitte Vorname und Nachname angeben.")
+                        else:
+                            exists = df[
+                                (df["Startnummer"].astype(str).str.strip() == str(startnummer).strip()) &
+                                (df["Klasse"].astype(str).str.strip() == str(klasse).strip())
+                            ]
+
+                            if not exists.empty:
+                                st.warning(
+                                    "⚠️ Ein Fahrer mit dieser Startnummer und Klasse existiert bereits. "
+                                    "Eintrag wird trotzdem hinzugefügt."
+                                )
+
+                            neuer_fahrer = {
+                                "Vorname": vorname.strip(),
+                                "Nachname": nachname.strip(),
+                                "Startnummer": int(startnummer),
+                                "Klasse": klasse,
+                                "Lizenz": lizenz,
+                                "Fahrzeug": fahrzeug.strip(),
+                                "Verein": verein.strip(),
+                                "Abnahme_Historie": ""
+                            }
+
+                            if save_new_fahrer_supabase(neuer_fahrer):
+                                os.makedirs(f"{ABNAHMEN_ROOT}/{startnummer}", exist_ok=True)
+                                st.success(
+                                    f"✅ Neuer Fahrer '{vorname} {nachname}' in Klasse '{klasse}' gespeichert!"
+                                )
+                                st.balloons()
+
+    # ==========================
+    # TAB 2: Fahrzeugabnahme
     # ==========================
     if role in ["admin", "admin2", "abnahme"]:
         with tab_abnahme:
@@ -490,15 +710,23 @@ def show():
                         "Klasse": klasse
                     }
 
-                    filename = f"{ABNAHMEN_ROOT}/{startnr}/{datum_now.replace(':','-').replace(' ','_')}.json"
+                    filename = f"{ABNAHMEN_ROOT}/{startnr}/{datum_now.replace(':', '-').replace(' ', '_')}.json"
                     with open(filename, "w", encoding="utf-8") as f:
                         json.dump(daten, f, ensure_ascii=False, indent=2)
+
+                    neuer_eintrag = (
+                        f"{datum_now} – {abnahme_typ} "
+                        f"({'Bestanden' if bestanden else 'Mängel'}) "
+                        f"durch {unterschrift} ({klasse})"
+                    )
+
+                    update_abnahme_historie_supabase(startnr, klasse, neuer_eintrag)
 
                     st.success(f"✅ Abnahme gespeichert ({abnahme_typ})")
                     st.balloons()
 
     # ==========================
-    # TAB 2: Historie
+    # TAB 3: Historie
     # ==========================
     if role in ["admin", "admin2", "abnahme"]:
         with tab_hist:
@@ -554,7 +782,7 @@ def show():
                         key=lambda x: x.get("Datum", ""),
                         reverse=True
                     ):
-                        label = f"{abnahme_data.get('Datum','')} – {abnahme_data.get('Typ','')}"
+                        label = f"{abnahme_data.get('Datum', '')} – {abnahme_data.get('Typ', '')}"
                         ergebnisse = abnahme_data.get("Ergebnisse", {})
                         hat_maengel_local = any(
                             d.get("Status") == "Mangel vorhanden"
@@ -592,7 +820,7 @@ def show():
                             st.markdown("</div>", unsafe_allow_html=True)
 
     # ==========================
-    # TAB 3: Jahresübersicht
+    # TAB 4: Jahresübersicht
     # ==========================
     with tab_jahr:
         st.header("📅 Jahresübersicht: Filter & Übersicht")
@@ -708,6 +936,16 @@ def show():
         c1.metric("Bestanden", int((view["Bestanden"] == "Ja").sum()) if "Bestanden" in view.columns else 0)
         c2.metric("Nicht bestanden", int((view["Bestanden"] == "Nein").sum()) if "Bestanden" in view.columns else 0)
         c3.metric("Gesamt", int(len(view)))
+
+    # --------------------
+    # Footer
+    # --------------------
+    st.markdown("""
+    <hr>
+    <div style='text-align:right; color:gray; font-size:0.9em;'>
+    Erstellt von <b>A. Stoppa</b> © 2025
+    </div>
+    """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
