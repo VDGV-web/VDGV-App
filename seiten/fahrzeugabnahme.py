@@ -15,6 +15,7 @@ from supabase_client import get_supabase
 
 
 def show():
+    st.error("DEBUG: fahrzeugabnahme.py wird geladen")
     # --------------------
     # Rollenprüfung
     # --------------------
